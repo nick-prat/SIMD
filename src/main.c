@@ -27,18 +27,17 @@ void apply_darken_filter(png_bytepp row_data, int width, int height, int depth) 
     }
 }
 
-void apply_filter(png_bytepp row_data, int width, int height, int depth) {
+void apply_filter(png_bytepp in, png_bytepp out, int width, int height, int depth) {
     for (int r = 0; r < height; r++) {
         for (int c = 0; c < width; c++) {
             for (int i = 0; i < 3; i++) {
-                int src = row_data[r][c * 4 + i];
-                row_data[r][c * 4 + i] = (unsigned char)(
-                    5 * src
-                    - row_data[max(r-1, 0)][c * 4 + i]
-                    - row_data[r][max(c-1, 0) * 4 + i]
-                    - row_data[min(r+1, height-1)][c * 4 + i]
-                    - row_data[r][min(c+1, width-1) * 4 + i]
-                );
+                int src = 5 * in[r][c * 4 + i];
+                src -= in[max(r-1, 0)][c * 4 + i];
+                src -= in[r][max(c-1, 0) * 4 + i];
+                src -= in[min(r+1, height-1)][c * 4 + i];
+                src -= in[r][min(c+1, width-1) * 4 + i];
+                src = max(min(src, 255), 0);
+                out[r][c * 4 + i] = (unsigned char)src;
             }
         }
     }
@@ -146,7 +145,7 @@ int main(int argc, char** argv) {
 
     png_read_image(png_ptr, row_ptrs);
 
-    apply_filter(row_ptrs, width, height, 8);
+    apply_filter(row_ptrs, row_ptrs, width, height, 8);
 
     write_png(row_ptrs, width, height);
 
