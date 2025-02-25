@@ -1,5 +1,5 @@
 main: main.o func.o
-	gcc -g main.o func.o -o main
+	gcc -g main.o func.o -lpng -lz -o main
 
 main.o: src/main.c
 	gcc -c src/main.c -o main.o -g
