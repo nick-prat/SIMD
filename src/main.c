@@ -6,6 +6,7 @@
 #include "pngconf.h"
 
 extern int multiply(int, int);
+extern void simd_filter(png_bytepp, png_bytepp, int, int, int);
 
 int min(int a, int b) {
     if (a < b) return a;
@@ -138,21 +139,29 @@ int main(int argc, char** argv) {
     fprintf(stdout, "Bit Depth: %d\n", bit_depth);
     fprintf(stdout, "Image size: %d x %d\n", width, height);
 
-    png_bytepp row_ptrs = (png_bytepp)malloc(sizeof(png_bytep) * height);
+    png_bytepp in_ptrs = (png_bytepp)malloc(sizeof(png_bytep) * height);
     for (int i = 0; i < height; i++) {
-        row_ptrs[i] = (png_bytep)malloc(png_get_rowbytes(png_ptr, info_ptr));
+        in_ptrs[i] = (png_bytep)malloc(png_get_rowbytes(png_ptr, info_ptr));
+    }
+    png_bytepp out_ptrs = (png_bytepp)malloc(sizeof(png_bytep) * height);
+    for (int i = 0; i < height; i++) {
+        out_ptrs[i] = (png_bytep)malloc(png_get_rowbytes(png_ptr, info_ptr));
     }
 
-    png_read_image(png_ptr, row_ptrs);
+    png_read_image(png_ptr, in_ptrs);
 
-    apply_filter(row_ptrs, row_ptrs, width, height, 8);
+    simd_filter(in_ptrs, out_ptrs, width, height, 8);
 
-    write_png(row_ptrs, width, height);
+    write_png(out_ptrs, width, height);
 
     for (int i = 0;i < height; i++) {
-        free(row_ptrs[i]);
+        free(in_ptrs[i]);
     }
-    free(row_ptrs);
+    free(in_ptrs);
+    for (int i = 0;i < height; i++) {
+        free(out_ptrs[i]);
+    }
+    free(out_ptrs);
 
     png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
 
