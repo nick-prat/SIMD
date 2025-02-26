@@ -1,14 +1,13 @@
 section .text
-    global multiply;
-    global simd_filter;
+    global simd_darken_filter
 
-multiply:
-    mov rax, rdi
-    imul rsi
-    ret
-
-simd_filter:
+simd_darken_filter:
     push rbx
+    pxor xmm1, xmm1 ; zero-d register to expand xmm0
+    mov rbx, 0x0000FFFFFFFFFFFF; shift values for image filter
+    movq xmm2, rbx
+    movlhps xmm2, xmm2
+
     mov r13, 0 ; r13 -> R counter
 hloop:
     mov rax, [rdi + r13 * 8]
@@ -16,23 +15,24 @@ hloop:
 
     mov r14, 0 ; r14 -> C counter
 wloop:
-    mov r11d, [rax + r14 * 4] 
-    movq xmm0, [rax + r14 * 4]
-    punpcklbw xmm0, xmm0
+    movups xmm0, [rax + r14 * 4] ; Load 4 pixels
+    vpunpcklbw xmm3, xmm0, xmm1 ; Extend lower 8-bit pixels into 16-bit pixels
+    vpunpckhbw xmm4, xmm0, xmm1 ; Extend higher 8-bit pixels into 16-bit pixels
 
-    mov r15, 0 ; r15 -> Ch counter
-cloop:
-    ; 32-bit Pixel is in r11d (ABGR)
-    and r11, 0xFF808080
+    vpand xmm5, xmm2, xmm3
+    psrlw xmm5, 1
+    vpandn xmm6, xmm2, xmm3
+    vpor xmm3, xmm5, xmm6 
 
-    inc r15 ; end of cloop
-    cmp r15, 4
-    jl cloop
+    vpand xmm5, xmm2, xmm4
+    psrlw xmm5, 1
+    vpandn xmm6, xmm2, xmm4
+    vpor xmm4, xmm5, xmm6 
 
-    ; Load pixel into dst pointer
-    mov [rbx + r14 * 4], r11d
+    vpackuswb xmm0, xmm3, xmm4 ; Pack 16-bit pixels back to 8-bit pixels w/ saturation
+    movups [rbx + r14 * 4], xmm0 ; Store 4 pixels from xmm0 into dst
 
-    inc r14 ; end of wloop
+    add r14, 4 ; end of wloop
     cmp r14, rdx
     jl wloop
 

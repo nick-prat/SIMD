@@ -4,9 +4,19 @@
 #include "setjmp.h"
 #include "stdio.h"
 #include "pngconf.h"
+#include <time.h>
 
-extern int multiply(int, int);
-extern void simd_filter(png_bytepp, png_bytepp, int, int, int);
+static long long RGB_MASK = 0x00FFFFFF00FFFFFF;
+static long long ALPHA_MASK = 0xFF000000FF000000;
+static long long OVER_FLOW_MASK = 0x007F7F7F007F7F7F;
+
+extern void simd_darken_filter(png_bytepp, png_bytepp, int, int);
+
+double get_time_seconds() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+    return ts.tv_sec + ts.tv_nsec * 1e-9;
+}
 
 int min(int a, int b) {
     if (a < b) return a;
@@ -18,12 +28,21 @@ int max(int a, int b) {
     return a;
 }
 
-void apply_darken_filter(png_bytepp row_data, int width, int height, int depth) {
+void darken_filter(png_bytepp in_ptrs, png_bytepp out_ptrs, int width, int height) {
     for (int r = 0; r < height; r++) {
         for (int c = 0; c < width; c++) {
             for (int i = 0; i < 3; i++) {
-                row_data[r][c * 4 + i] = row_data[r][c * 4 + i] >> 1;
+                out_ptrs[r][c * 4 + i] = in_ptrs[r][c * 4 + i] >> 1;
             }
+        }
+    }
+}
+
+void darken_filter2(png_bytepp in_ptrs, png_bytepp out_ptrs, int width, int height) {
+    for (int r = 0; r < height; r++) {
+        for (int c = 0; c < (width >> 1); c++) {
+            long long d_pix = ((long long*)in_ptrs[r])[c];
+            ((long long*)out_ptrs[r])[c] = (((d_pix & RGB_MASK) >> 1) & OVER_FLOW_MASK) | (d_pix & ALPHA_MASK);
         }
     }
 }
@@ -150,7 +169,23 @@ int main(int argc, char** argv) {
 
     png_read_image(png_ptr, in_ptrs);
 
-    simd_filter(in_ptrs, out_ptrs, width, height, 8);
+    int runs = 1000;
+
+    double ss = get_time_seconds();
+    for (int i = 0; i < runs; i++) {
+        simd_darken_filter(in_ptrs, out_ptrs, width, height);
+    }
+    double se = get_time_seconds();
+
+    printf("SIMD: %d runs in %lf seconds\n", runs, se-ss);
+
+    double s = get_time_seconds();
+    for (int i = 0; i < runs; i++) {
+        darken_filter2(in_ptrs, out_ptrs, width, height);
+    }
+    double e = get_time_seconds();
+
+    printf("C: %d runs in %lf seconds\n", runs, e-s);
 
     write_png(out_ptrs, width, height);
 
